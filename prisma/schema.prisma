@@ -13,20 +13,30 @@ enum Role {
   VIEWER
 }
 
+enum TaskStatus {
+  TODO
+  IN_PROCESS
+  DONE
+}
+
 model User {
-  id          String       @id @default(cuid())
-  email       String       @unique
-  passwordHash String
-  createdAt   DateTime     @default(now())
-  memberships Membership[]
-  tasks       Task[]       @relation("TaskOwner")
-  audits      AuditLog[]
+  id           String        @id @default(cuid())
+  email        String        @unique
+  displayName  String?
+  googleSub    String?       @unique
+  appleSub     String?       @unique
+  passwordHash String?
+  createdAt    DateTime      @default(now())
+  memberships  Membership[]
+  tasks        Task[]        @relation("TaskOwner")
+  audits       AuditLog[]
+  workSessions WorkSession[]
 }
 
 model Household {
-  id          String       @id @default(cuid())
+  id          String          @id @default(cuid())
   name        String
-  createdAt   DateTime     @default(now())
+  createdAt   DateTime        @default(now())
   memberships Membership[]
   tasks       Task[]
   accounts    Account[]
@@ -46,18 +56,37 @@ model Membership {
 }
 
 model Task {
-  id            String    @id @default(cuid())
-  householdId   String
-  ownerUserId   String?
-  title         String
-  description   String?
-  dueAt         DateTime?
+  id              String        @id @default(cuid())
+  householdId     String
+  ownerUserId     String?
+  title           String
+  description     String?
+  project         String?
+  dueAt           DateTime?
   recurrenceRrule String?
-  status        String    @default("open")
-  createdAt     DateTime  @default(now())
-  completedAt   DateTime?
-  household     Household @relation(fields: [householdId], references: [id])
-  owner         User?     @relation("TaskOwner", fields: [ownerUserId], references: [id])
+  status          TaskStatus    @default(TODO)
+  startedOn       DateTime?
+  finishedOn      DateTime?
+  createdAt       DateTime      @default(now())
+  completedAt     DateTime?
+  household       Household     @relation(fields: [householdId], references: [id])
+  owner           User?         @relation("TaskOwner", fields: [ownerUserId], references: [id])
+  workSessions    WorkSession[]
+}
+
+model WorkSession {
+  id        String   @id @default(cuid())
+  userId    String
+  taskId    String
+  startedAt DateTime
+  endedAt   DateTime?
+  notes     String   @default("")
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  task      Task     @relation(fields: [taskId], references: [id])
+
+  @@index([userId, endedAt])
+  @@index([taskId, startedAt])
 }
 
 model Account {
@@ -71,14 +100,14 @@ model Account {
 }
 
 model CashflowEntry {
-  id          String    @id @default(cuid())
-  accountId   String
-  amount      Decimal
-  direction   String
-  category    String?
-  occurredAt  DateTime
-  recurring   Boolean   @default(false)
-  account     Account   @relation(fields: [accountId], references: [id])
+  id         String   @id @default(cuid())
+  accountId  String
+  amount     Decimal
+  direction  String
+  category   String?
+  occurredAt DateTime
+  recurring  Boolean  @default(false)
+  account    Account  @relation(fields: [accountId], references: [id])
 }
 
 model InventoryItem {
@@ -94,23 +123,23 @@ model InventoryItem {
 }
 
 model Obligation {
-  id           String    @id @default(cuid())
-  householdId  String
-  type         String
-  title        String
-  dueAt        DateTime
-  reminderAt   DateTime?
-  status       String    @default("active")
-  household    Household @relation(fields: [householdId], references: [id])
+  id          String    @id @default(cuid())
+  householdId String
+  type        String
+  title       String
+  dueAt       DateTime
+  reminderAt  DateTime?
+  status      String    @default("active")
+  household   Household @relation(fields: [householdId], references: [id])
 }
 
 model AuditLog {
-  id         String   @id @default(cuid())
+  id          String   @id @default(cuid())
   actorUserId String?
-  action     String
-  entityType String
-  entityId   String
-  payload    Json?
-  createdAt  DateTime @default(now())
-  actor      User?    @relation(fields: [actorUserId], references: [id])
+  action      String
+  entityType  String
+  entityId    String
+  payload     Json?
+  createdAt   DateTime @default(now())
+  actor       User?    @relation(fields: [actorUserId], references: [id])
 }
