@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  VIEWER
+}
+
+model User {
+  id          String       @id @default(cuid())
+  email       String       @unique
+  passwordHash String
+  createdAt   DateTime     @default(now())
+  memberships Membership[]
+  tasks       Task[]       @relation("TaskOwner")
+  audits      AuditLog[]
+}
+
+model Household {
+  id          String       @id @default(cuid())
+  name        String
+  createdAt   DateTime     @default(now())
+  memberships Membership[]
+  tasks       Task[]
+  accounts    Account[]
+  inventory   InventoryItem[]
+  obligations Obligation[]
+}
+
+model Membership {
+  id          String    @id @default(cuid())
+  userId      String
+  householdId String
+  role        Role
+  user        User      @relation(fields: [userId], references: [id])
+  household   Household @relation(fields: [householdId], references: [id])
+
+  @@unique([userId, householdId])
+}
+
+model Task {
+  id            String    @id @default(cuid())
+  householdId   String
+  ownerUserId   String?
+  title         String
+  description   String?
+  dueAt         DateTime?
+  recurrenceRrule String?
+  status        String    @default("open")
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+  household     Household @relation(fields: [householdId], references: [id])
+  owner         User?     @relation("TaskOwner", fields: [ownerUserId], references: [id])
+}
+
+model Account {
+  id          String         @id @default(cuid())
+  householdId String
+  name        String
+  currency    String         @default("EUR")
+  createdAt   DateTime       @default(now())
+  household   Household      @relation(fields: [householdId], references: [id])
+  entries     CashflowEntry[]
+}
+
+model CashflowEntry {
+  id          String    @id @default(cuid())
+  accountId   String
+  amount      Decimal
+  direction   String
+  category    String?
+  occurredAt  DateTime
+  recurring   Boolean   @default(false)
+  account     Account   @relation(fields: [accountId], references: [id])
+}
+
+model InventoryItem {
+  id            String    @id @default(cuid())
+  householdId   String
+  name          String
+  category      String?
+  location      String?
+  acquiredAt    DateTime?
+  currentValue  Decimal?
+  warrantyUntil DateTime?
+  household     Household @relation(fields: [householdId], references: [id])
+}
+
+model Obligation {
+  id           String    @id @default(cuid())
+  householdId  String
+  type         String
+  title        String
+  dueAt        DateTime
+  reminderAt   DateTime?
+  status       String    @default("active")
+  household    Household @relation(fields: [householdId], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorUserId String?
+  action     String
+  entityType String
+  entityId   String
+  payload    Json?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation(fields: [actorUserId], references: [id])
+}
