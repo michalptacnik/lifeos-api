@@ -2,7 +2,7 @@ import "dotenv/config";
 import cors from "cors";
 import express, { type Request, type Response } from "express";
 import helmet from "helmet";
-import { PrismaClient, Role, TaskStatus } from "@prisma/client";
+import { PrismaClient, Role, TaskArea, TaskStatus } from "@prisma/client";
 import { z } from "zod";
 import { timingSafeEqual } from "node:crypto";
 
@@ -19,6 +19,7 @@ const expectedInternalKey = process.env.INTERNAL_API_KEY;
 const taskCreateSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional().nullable(),
+  area: z.nativeEnum(TaskArea).optional(),
   project: z.string().optional().nullable(),
   ownerEmail: z.string().email().optional().nullable(),
   status: z.nativeEnum(TaskStatus).optional(),
@@ -29,6 +30,7 @@ const taskCreateSchema = z.object({
 const taskUpdateSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional().nullable(),
+  area: z.nativeEnum(TaskArea).optional(),
   project: z.string().optional().nullable(),
   ownerEmail: z.string().email().optional().nullable(),
   status: z.nativeEnum(TaskStatus).optional(),
@@ -48,10 +50,48 @@ const workUpdateSchema = z.object({
   notes: z.string().max(5000)
 });
 
+const automationPlanSchema = z.object({
+  mode: z.enum(["dry_run", "apply"]).default("dry_run"),
+  area: z.nativeEnum(TaskArea).optional(),
+  project: z.string().optional(),
+  limit: z.number().int().min(1).max(20).default(5),
+  confirmBudgetApply: z.boolean().optional().default(false)
+});
+
 function parseNullableDate(value?: string | null): Date | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
   return new Date(value);
+}
+
+function parseAreaFromLegacyProject(project?: string | null): TaskArea | undefined {
+  if (!project) return undefined;
+  const prefix = project.split("::")[0];
+  if (prefix === "HOME" || prefix === "BUDGET" || prefix === "WORK") {
+    return prefix;
+  }
+  return undefined;
+}
+
+function stripLegacyAreaPrefix(project?: string | null): string | null | undefined {
+  if (project === undefined) return undefined;
+  if (project === null) return null;
+
+  const parsedArea = parseAreaFromLegacyProject(project);
+  if (!parsedArea) {
+    const trimmed = project.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  const name = project.slice(`${parsedArea}::`.length).trim();
+  return name ? name : null;
+}
+
+function normalizeAreaAndProject(input: { area?: TaskArea; project?: string | null; fallbackArea?: TaskArea }) {
+  const fromProject = parseAreaFromLegacyProject(input.project);
+  const area = input.area ?? fromProject ?? input.fallbackArea ?? TaskArea.WORK;
+  const project = stripLegacyAreaPrefix(input.project);
+  return { area, project };
 }
 
 function safeEqual(a: string, b: string) {
@@ -162,6 +202,7 @@ function mapTask(task: {
   id: string;
   title: string;
   description: string | null;
+  area: TaskArea;
   project: string | null;
   status: TaskStatus;
   startedOn: Date | null;
@@ -173,6 +214,7 @@ function mapTask(task: {
     id: task.id,
     title: task.title,
     description: task.description,
+    area: task.area,
     project: task.project,
     status: task.status,
     startedOn: task.startedOn,
@@ -184,6 +226,12 @@ function mapTask(task: {
 
 function toIcsDate(date: Date) {
   return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function trimToNull(value?: string) {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
 
 app.get("/health", (_req, res) => {
@@ -216,6 +264,7 @@ app.post("/tasks", async (req, res) => {
     const payload = taskCreateSchema.parse(req.body);
     const { householdId, user } = await ensureContext(req);
     const owner = await resolveTaskOwner(householdId, payload.ownerEmail ?? user.email);
+    const normalized = normalizeAreaAndProject({ area: payload.area, project: payload.project });
 
     const task = await prisma.task.create({
       data: {
@@ -223,7 +272,8 @@ app.post("/tasks", async (req, res) => {
         ownerUserId: owner?.id ?? user.id,
         title: payload.title,
         description: payload.description ?? null,
-        project: payload.project ?? null,
+        area: normalized.area,
+        project: normalized.project ?? null,
         status: payload.status ?? TaskStatus.TODO,
         startedOn: parseNullableDate(payload.startedOn),
         finishedOn: parseNullableDate(payload.finishedOn)
@@ -252,11 +302,17 @@ app.patch("/tasks/:id", async (req, res) => {
 
     const owner = await resolveTaskOwner(householdId, payload.ownerEmail);
     const nextStatus = payload.status ?? existing.status;
+    const normalized = normalizeAreaAndProject({
+      area: payload.area ?? existing.area,
+      project: payload.project === undefined ? existing.project : payload.project,
+      fallbackArea: existing.area
+    });
 
     const updateData: Record<string, unknown> = {
       title: payload.title ?? existing.title,
       description: payload.description === undefined ? existing.description : payload.description,
-      project: payload.project === undefined ? existing.project : payload.project,
+      area: normalized.area,
+      project: normalized.project,
       ownerUserId: owner ? owner.id : existing.ownerUserId,
       status: nextStatus,
       startedOn: payload.startedOn === undefined ? existing.startedOn : parseNullableDate(payload.startedOn),
@@ -470,6 +526,164 @@ app.patch("/worktime/:id", async (req, res) => {
   }
 });
 
+app.get("/automation/activity", async (req, res) => {
+  try {
+    const { householdId } = await ensureContext(req);
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        entityType: "automation"
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100
+    });
+
+    res.json(
+      logs
+        .filter((log) => {
+          const payload = log.payload as Record<string, unknown> | null;
+          return payload?.householdId === householdId;
+        })
+        .slice(0, 20)
+        .map((log) => ({
+          id: log.id,
+          action: log.action,
+          payload: log.payload,
+          createdAt: log.createdAt
+        }))
+    );
+  } catch (error) {
+    res.status(400).json({ message: (error as Error).message });
+  }
+});
+
+app.post("/automation/plan-day", async (req, res) => {
+  try {
+    const payload = automationPlanSchema.parse(req.body ?? {});
+    const { householdId, user } = await ensureContext(req);
+    const projectFilter = trimToNull(payload.project);
+
+    const candidates = await prisma.task.findMany({
+      where: {
+        householdId,
+        area: payload.area,
+        project: projectFilter ?? undefined,
+        status: { in: [TaskStatus.TODO, TaskStatus.IN_PROCESS] }
+      },
+      include: { owner: { select: { email: true } } },
+      orderBy: [{ createdAt: "asc" }],
+      take: 60
+    });
+
+    const scored = candidates
+      .map((task) => {
+        let score = 0;
+        if (task.status === TaskStatus.IN_PROCESS) score += 100;
+        if (task.startedOn) score += 25;
+        const ageDays = Math.floor((Date.now() - task.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+        score += Math.min(40, Math.max(0, ageDays));
+        const reason = task.status === TaskStatus.IN_PROCESS ? "already in progress" : "oldest pending in selected scope";
+        return { task, score, reason };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, payload.limit);
+
+    const plan = scored.map(({ task, reason }) => ({
+      id: task.id,
+      title: task.title,
+      area: task.area,
+      project: task.project,
+      status: task.status,
+      ownerEmail: task.owner?.email ?? null,
+      reason
+    }));
+
+    const firstTodo = scored.find((item) => item.task.status === TaskStatus.TODO)?.task ?? null;
+    const proposedChanges = firstTodo
+      ? [
+          {
+            type: "task_status_update",
+            taskId: firstTodo.id,
+            title: firstTodo.title,
+            before: { status: firstTodo.status, startedOn: firstTodo.startedOn },
+            after: { status: TaskStatus.IN_PROCESS, startedOn: firstTodo.startedOn ?? new Date() },
+            reason: "promote highest-priority TODO for today plan"
+          }
+        ]
+      : [];
+    const summary = firstTodo
+      ? `Will promote "${firstTodo.title}" from TODO to IN_PROCESS.`
+      : "No TODO task needs status change; plan is informational only.";
+
+    if (payload.mode === "dry_run") {
+      res.json({
+        mode: "dry_run",
+        selected: plan,
+        summary,
+        changes: proposedChanges,
+        applied: null
+      });
+      return;
+    }
+
+    if ((payload.area ?? TaskArea.WORK) === TaskArea.BUDGET && !payload.confirmBudgetApply) {
+      res.status(403).json({
+        message: "Budget apply requires explicit confirmation.",
+        approvalRequired: true,
+        requiredConfirmationField: "confirmBudgetApply",
+        mode: "apply_blocked",
+        selected: plan,
+        summary,
+        changes: proposedChanges
+      });
+      return;
+    }
+
+    let promotedTaskId: string | null = null;
+
+    await prisma.$transaction(async (tx) => {
+      if (firstTodo) {
+        await tx.task.update({
+          where: { id: firstTodo.id },
+          data: {
+            status: TaskStatus.IN_PROCESS,
+            startedOn: firstTodo.startedOn ?? new Date()
+          }
+        });
+        promotedTaskId = firstTodo.id;
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: user.id,
+          action: "automation.plan_day.apply",
+          entityType: "automation",
+          entityId: `plan-day:${new Date().toISOString()}`,
+          payload: {
+            householdId,
+            area: payload.area ?? null,
+            project: projectFilter ?? null,
+            limit: payload.limit,
+            selectedTaskIds: plan.map((item) => item.id),
+            promotedTaskId
+          }
+        }
+      });
+    });
+
+    res.json({
+      mode: "apply",
+      selected: plan,
+      summary,
+      changes: proposedChanges,
+      applied: {
+        promotedTaskId
+      }
+    });
+  } catch (error) {
+    res.status(400).json({ message: (error as Error).message });
+  }
+});
+
 app.get("/calendar/tasks.ics", async (req, res) => {
   try {
     const { householdId } = await ensureContext(req);
@@ -500,6 +714,7 @@ app.get("/calendar/tasks.ics", async (req, res) => {
       lines.push(`SUMMARY:${task.title.replace(/,/g, "\\,")}`);
       const desc = [
         `Status: ${task.status}`,
+        `Area: ${task.area}`,
         task.project ? `Project: ${task.project}` : "",
         task.owner?.email ? `Owner: ${task.owner.email}` : "",
         task.description ? `Notes: ${task.description}` : ""

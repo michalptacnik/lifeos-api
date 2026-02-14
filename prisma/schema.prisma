@@ -19,6 +19,12 @@ enum TaskStatus {
   DONE
 }
 
+enum TaskArea {
+  HOME
+  BUDGET
+  WORK
+}
+
 model User {
   id           String        @id @default(cuid())
   email        String        @unique
@@ -61,6 +67,7 @@ model Task {
   ownerUserId     String?
   title           String
   description     String?
+  area            TaskArea      @default(WORK)
   project         String?
   dueAt           DateTime?
   recurrenceRrule String?
