@@ -150,3 +150,28 @@
 ### Next steps
 - Add unit conversion and ingredient alias map to reduce false shortages.
 - Implement web MVP2 recipe + availability UI on top of `/food/recipes` endpoints.
+
+## 2026-02-17 (MVP2 food stock mutation rules + audit trail)
+### What changed
+- Added `expiresAt` support to inventory items in Prisma schema and migration `prisma/migrations/20260217162000_food_stock_mutations/migration.sql`.
+- Extended `src/routes/inventory.ts` create/update contracts to accept optional `expiresAt` and return it in payload.
+- Extended `src/routes/food.ts` with `POST /food/stock/:id/mutate` for transactional food stock mutations (`add`, `use`, `adjust`).
+- Enforced safe stock rules: mutation is rejected when resulting quantity would be negative.
+- Added audit logging on each successful food stock mutation with actor, action, and quantity delta metadata.
+- Updated recipe feasibility query to exclude expired food stock (`expiresAt` in the past).
+- Added integration tests in `src/app.test.ts` for safe mutation and negative-transition rejection.
+- Updated `README.md` and `docs/CODEX_MEMORY.md` for food stock mutation contract.
+
+### Why
+- Execute MVP2 stock-safety issue so food inventory transitions are traceable and safe by default, with no silent negative stock states.
+
+### Commands/tests run
+- `npm run prisma:generate`
+- `./node_modules/.bin/tsc --noEmit && npm run test && npm run build`
+
+### Known issues/risks
+- Mutation contracts do not yet include reason-code enums; note text is optional and free-form.
+
+### Next steps
+- Add reason-code taxonomy and reporting views over `AuditLog` mutation entries.
+- Add contract tests around malformed quantity payload coercion edge cases.

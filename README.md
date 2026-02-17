@@ -21,6 +21,7 @@ Modular monolith backend for LifeOS using Node.js, TypeScript, Express, Prisma, 
 - `PATCH /food/recipes/:id`
 - `DELETE /food/recipes/:id`
 - `GET /food/recipes/:id/availability`
+- `POST /food/stock/:id/mutate`
 - `GET /worktime`
 - `POST /worktime/start`
 - `POST /worktime/stop`
@@ -43,3 +44,4 @@ npm run dev
 - Protected routes require both `x-internal-api-key` and `x-user-email` headers.
 - `x-user-email` must be a valid email; malformed or missing values are rejected at API boundary.
 - Production startup fails if dev bypass env vars are configured (`ALLOW_DEV_AUTH_BYPASS=true` or non-empty `DEV_AUTH_BYPASS_EMAIL`).
+- Food stock mutations are transaction-backed and emit audit records with actor + delta metadata.

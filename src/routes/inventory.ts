@@ -9,7 +9,8 @@ const createInventorySchema = z.object({
   quantity: z.number().positive().optional().default(1),
   unit: z.string().trim().min(1).max(40).optional().default("item"),
   category: z.string().trim().max(120).optional().nullable(),
-  location: z.string().trim().max(120).optional().nullable()
+  location: z.string().trim().max(120).optional().nullable(),
+  expiresAt: z.string().datetime().optional().nullable()
 });
 
 const updateInventorySchema = z.object({
@@ -18,7 +19,8 @@ const updateInventorySchema = z.object({
   quantity: z.number().positive().optional(),
   unit: z.string().trim().min(1).max(40).optional(),
   category: z.string().trim().max(120).optional().nullable(),
-  location: z.string().trim().max(120).optional().nullable()
+  location: z.string().trim().max(120).optional().nullable(),
+  expiresAt: z.string().datetime().optional().nullable()
 });
 
 function trimToNull(value?: string | null) {
@@ -36,6 +38,7 @@ function mapInventoryItem(item: {
   unit: string;
   category: string | null;
   location: string | null;
+  expiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -47,6 +50,7 @@ function mapInventoryItem(item: {
     unit: item.unit,
     category: item.category,
     location: item.location,
+    expiresAt: item.expiresAt,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt
   };
@@ -85,7 +89,8 @@ export function createInventoryRouter(prisma: PrismaClient) {
         quantity: payload.quantity,
         unit: payload.unit.trim(),
         category: trimToNull(payload.category),
-        location: trimToNull(payload.location)
+        location: trimToNull(payload.location),
+        expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : null
       }
     });
 
@@ -112,7 +117,8 @@ export function createInventoryRouter(prisma: PrismaClient) {
         ...(payload.quantity !== undefined ? { quantity: payload.quantity } : {}),
         ...(payload.unit !== undefined ? { unit: payload.unit.trim() } : {}),
         ...(payload.category !== undefined ? { category: trimToNull(payload.category) } : {}),
-        ...(payload.location !== undefined ? { location: trimToNull(payload.location) } : {})
+        ...(payload.location !== undefined ? { location: trimToNull(payload.location) } : {}),
+        ...(payload.expiresAt !== undefined ? { expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : null } : {})
       }
     });
 

@@ -133,6 +133,7 @@ model InventoryItem {
   unit          String           @default("item")
   category      String?
   location      String?
+  expiresAt     DateTime?
   acquiredAt    DateTime?
   currentValue  Decimal?
   warrantyUntil DateTime?
