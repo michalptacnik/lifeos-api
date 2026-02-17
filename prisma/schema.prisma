@@ -53,6 +53,7 @@ model Household {
   tasks       Task[]
   accounts    Account[]
   inventory   InventoryItem[]
+  recipes     Recipe[]
   obligations Obligation[]
 }
 
@@ -140,6 +141,31 @@ model InventoryItem {
   household     Household        @relation(fields: [householdId], references: [id])
 
   @@index([householdId, subtype])
+}
+
+model Recipe {
+  id          String             @id @default(cuid())
+  householdId String
+  name        String
+  description String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  household   Household          @relation(fields: [householdId], references: [id])
+  ingredients RecipeIngredient[]
+
+  @@index([householdId, name])
+}
+
+model RecipeIngredient {
+  id        String   @id @default(cuid())
+  recipeId  String
+  name      String
+  quantity  Decimal  @default(1)
+  unit      String   @default("item")
+  createdAt DateTime @default(now())
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@index([recipeId, name])
 }
 
 model Obligation {

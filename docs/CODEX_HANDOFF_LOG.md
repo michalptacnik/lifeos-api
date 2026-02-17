@@ -120,3 +120,33 @@
 ### Next steps
 - Add food-specific fields/flows (recipes and ingredient availability checks) in MVP2.
 - Add contract tests for inventory update/delete error paths and invalid subtype query handling.
+
+## 2026-02-17 (MVP2 food recipes + availability engine)
+### What changed
+- Added food recipe domain models in Prisma:
+  - `Recipe` (household-scoped recipe metadata)
+  - `RecipeIngredient` (required ingredients with quantity and unit)
+- Added migration `prisma/migrations/20260217151000_food_recipes/migration.sql` with tables, indexes, and FK constraints.
+- Implemented `src/routes/food.ts` with household-scoped endpoints:
+  - `GET /food/recipes`
+  - `POST /food/recipes`
+  - `PATCH /food/recipes/:id`
+  - `DELETE /food/recipes/:id`
+  - `GET /food/recipes/:id/availability`
+- Wired food router in `src/app.ts` under `/food`.
+- Added integration tests in `src/app.test.ts` for recipe creation and deterministic shortage evaluation from `FOOD` inventory.
+- Updated `README.md` and `docs/CODEX_MEMORY.md` to reflect new API contracts and behavior.
+
+### Why
+- Execute MVP2 backend scope so users can define recipes and reliably check feasibility from current food store with exact shortage deltas.
+
+### Commands/tests run
+- `npm run prisma:generate`
+- `./node_modules/.bin/tsc --noEmit && npm run test && npm run build`
+
+### Known issues/risks
+- Availability matching is exact by normalized `(name, unit)` and does not yet perform unit conversion (for example `g` vs `kg`) or ingredient aliasing.
+
+### Next steps
+- Add unit conversion and ingredient alias map to reduce false shortages.
+- Implement web MVP2 recipe + availability UI on top of `/food/recipes` endpoints.
