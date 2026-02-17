@@ -175,3 +175,34 @@
 ### Next steps
 - Add reason-code taxonomy and reporting views over `AuditLog` mutation entries.
 - Add contract tests around malformed quantity payload coercion edge cases.
+
+## 2026-02-17 (MVP3 matrix integration service layer)
+### What changed
+- Added Prisma matrix domain models and enum:
+  - `MatrixIdentity`
+  - `MatrixRoom`
+  - `MatrixRoomMembership`
+  - `MatrixRelayEvent`
+  - `MatrixMembershipState`
+- Added migration `prisma/migrations/20260217172000_matrix_service_layer/migration.sql`.
+- Implemented `src/routes/matrix.ts` and wired it in `src/app.ts` with endpoints:
+  - `GET /matrix/rooms`
+  - `POST /matrix/rooms/bootstrap`
+  - `POST /matrix/rooms/:roomId/sync-membership`
+  - `POST /matrix/rooms/:roomId/relay`
+- Added integration tests in `src/app.test.ts` for room bootstrap, membership sync, and relay hook unread updates.
+- Updated `README.md` and `docs/CODEX_MEMORY.md` for matrix contracts and operational behavior.
+
+### Why
+- Execute MVP3 backend issue by introducing a stable matrix service contract for room identity mapping, membership sync, and event relay hooks.
+
+### Commands/tests run
+- `npm run prisma:generate`
+- `./node_modules/.bin/tsc --noEmit && npm run test && npm run build`
+
+### Known issues/risks
+- Relay hooks currently trust email-based unread snapshots and do not yet enforce upstream event signatures.
+
+### Next steps
+- Add signature verification for matrix relay hooks.
+- Add room-level pagination/filter options for large household chat histories.

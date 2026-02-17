@@ -15,6 +15,7 @@
 - Inventory domain now supports subtype-aware items (`HOME`, `WORK`, `FOOD`) with quantity/unit semantics.
 - Food domain now includes recipe storage with ingredient quantities and deterministic availability checks against `FOOD` inventory items.
 - Food inventory now supports guarded stock mutations (`add/use/adjust`) with transactional audit logging and optional expiration dates.
+- Matrix integration layer now supports household-scoped room bootstrap, membership sync, and relay hooks for unread counters.
 
 ## Key files
 - `src/routes/auth.ts`
@@ -27,6 +28,7 @@
 - `src/domain.ts`
 - `src/routes/inventory.ts`
 - `src/routes/food.ts`
+- `src/routes/matrix.ts`
 - `prisma/schema.prisma`
 - `src/bootstrap.ts`
 
@@ -38,9 +40,11 @@
 - Inventory endpoints are household-scoped via `ensureContext` and support subtype filtering.
 - Food recipe endpoints are household-scoped via `ensureContext`; availability checks compare normalized ingredient `(name, unit)` against aggregated `FOOD` inventory quantities and return exact shortages.
 - Food stock mutation endpoint (`POST /food/stock/:id/mutate`) rejects negative transitions and writes `AuditLog` entries with actor/action/delta payload.
+- Matrix endpoints persist `MatrixRoom`, `MatrixIdentity`, `MatrixRoomMembership`, and `MatrixRelayEvent` records for stable client sync contracts.
 
 ## Open risks
 - Need stronger production-grade auth observability/audit for failed login patterns.
 - Redis outage currently blocks login lockout checks (auth availability dependency).
 - Recipe ingredient matching currently depends on exact normalized `(name, unit)` strings; no unit conversion or synonym resolution is implemented yet.
 - Food availability currently ignores unit conversion; expiration filtering only excludes items with `expiresAt` in the past.
+- Matrix relay hook currently updates unread counters by email and expects clients to send canonical unread snapshots.
