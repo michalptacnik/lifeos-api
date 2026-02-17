@@ -13,6 +13,7 @@
 - Added `/ready` endpoint for dependency readiness (Postgres + Redis), separate from `/health` liveness.
 - Production startup now rejects dev bypass env configuration (`ALLOW_DEV_AUTH_BYPASS`/`DEV_AUTH_BYPASS_EMAIL`).
 - Inventory domain now supports subtype-aware items (`HOME`, `WORK`, `FOOD`) with quantity/unit semantics.
+- Food domain now includes recipe storage with ingredient quantities and deterministic availability checks against `FOOD` inventory items.
 
 ## Key files
 - `src/routes/auth.ts`
@@ -24,6 +25,7 @@
 - `src/app.ts`
 - `src/domain.ts`
 - `src/routes/inventory.ts`
+- `src/routes/food.ts`
 - `prisma/schema.prisma`
 - `src/bootstrap.ts`
 
@@ -33,7 +35,9 @@
 - `REDIS_URL` is required and should point at the shared Redis instance used by all API instances.
 - Production should set explicit `ADMIN_PASSWORD` and avoid development defaults.
 - Inventory endpoints are household-scoped via `ensureContext` and support subtype filtering.
+- Food recipe endpoints are household-scoped via `ensureContext`; availability checks compare normalized ingredient `(name, unit)` against aggregated `FOOD` inventory quantities and return exact shortages.
 
 ## Open risks
 - Need stronger production-grade auth observability/audit for failed login patterns.
 - Redis outage currently blocks login lockout checks (auth availability dependency).
+- Recipe ingredient matching currently depends on exact normalized `(name, unit)` strings; no unit conversion or synonym resolution is implemented yet.

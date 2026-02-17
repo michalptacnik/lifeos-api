@@ -21,6 +21,18 @@ function basePrismaMock() {
       update: vi.fn(),
       deleteMany: vi.fn()
     },
+    recipe: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      deleteMany: vi.fn()
+    },
+    recipeIngredient: {
+      deleteMany: vi.fn(),
+      createMany: vi.fn()
+    },
     workSession: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
@@ -30,7 +42,14 @@ function basePrismaMock() {
       findUnique: vi.fn()
     },
     auditLog: { findMany: vi.fn(), create: vi.fn() },
-    $transaction: vi.fn(async (cb: (tx: any) => Promise<void>) => cb({ task: { update: vi.fn() }, auditLog: { create: vi.fn() } }))
+    $transaction: vi.fn(async (cb: (tx: any) => Promise<void>) =>
+      cb({
+        task: { update: vi.fn() },
+        auditLog: { create: vi.fn() },
+        recipe: { update: vi.fn(), findUniqueOrThrow: vi.fn() },
+        recipeIngredient: { deleteMany: vi.fn(), createMany: vi.fn() }
+      })
+    )
   };
 }
 
@@ -219,6 +238,81 @@ describe("lifeos-api integration routes", () => {
     expect(prisma.inventoryItem.findMany).toHaveBeenCalledWith({
       where: { householdId: "h1", subtype: "FOOD" },
       orderBy: [{ subtype: "asc" }, { name: "asc" }]
+    });
+  });
+
+  it("creates a food recipe", async () => {
+    const prisma = basePrismaMock();
+    prisma.user.upsert.mockResolvedValue({ id: "u1", email: "dev@example.com" });
+    prisma.membership.findFirst.mockResolvedValue({ householdId: "h1" });
+    prisma.recipe.create.mockResolvedValue({
+      id: "r1",
+      name: "Pancakes",
+      description: "Quick breakfast",
+      createdAt: new Date("2026-02-17T00:00:00.000Z"),
+      updatedAt: new Date("2026-02-17T00:00:00.000Z"),
+      ingredients: [
+        {
+          id: "ri1",
+          name: "Flour",
+          quantity: 0.3,
+          unit: "kg",
+          createdAt: new Date("2026-02-17T00:00:00.000Z")
+        }
+      ]
+    });
+
+    const app = createApp(prisma as any);
+    const res = await request(app)
+      .post("/food/recipes")
+      .set("x-internal-api-key", process.env.INTERNAL_API_KEY!)
+      .set("x-user-email", "dev@example.com")
+      .send({
+        name: "Pancakes",
+        description: "Quick breakfast",
+        ingredients: [{ name: "Flour", quantity: 0.3, unit: "kg" }]
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.name).toBe("Pancakes");
+    expect(res.body.ingredients).toHaveLength(1);
+  });
+
+  it("returns recipe shortages from food inventory", async () => {
+    const prisma = basePrismaMock();
+    prisma.user.upsert.mockResolvedValue({ id: "u1", email: "dev@example.com" });
+    prisma.membership.findFirst.mockResolvedValue({ householdId: "h1" });
+    prisma.recipe.findFirst.mockResolvedValue({
+      id: "r1",
+      ingredients: [
+        { id: "ri1", name: "Flour", quantity: 0.3, unit: "kg" },
+        { id: "ri2", name: "Milk", quantity: 1, unit: "l" },
+        { id: "ri3", name: "Egg", quantity: 3, unit: "item" }
+      ]
+    });
+    prisma.inventoryItem.findMany.mockResolvedValue([
+      { name: "Flour", quantity: 1.0, unit: "kg" },
+      { name: "Milk", quantity: 0.25, unit: "l" },
+      { name: "Stapler", quantity: 2, unit: "item" }
+    ]);
+
+    const app = createApp(prisma as any);
+    const res = await request(app)
+      .get("/food/recipes/r1/availability")
+      .set("x-internal-api-key", process.env.INTERNAL_API_KEY!)
+      .set("x-user-email", "dev@example.com");
+
+    expect(res.status).toBe(200);
+    expect(res.body.feasible).toBe(false);
+    expect(res.body.shortages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Milk", missingQuantity: 0.75, status: "partial" }),
+        expect.objectContaining({ name: "Egg", missingQuantity: 3, status: "missing" })
+      ])
+    );
+    expect(prisma.inventoryItem.findMany).toHaveBeenCalledWith({
+      where: { householdId: "h1", subtype: "FOOD" },
+      select: { name: true, unit: true, quantity: true }
     });
   });
 });
