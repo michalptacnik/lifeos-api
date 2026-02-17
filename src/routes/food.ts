@@ -21,6 +21,30 @@ const updateRecipeSchema = z.object({
   ingredients: z.array(ingredientInputSchema).min(1).optional()
 });
 
+const foodStockMutationSchema = z
+  .object({
+    action: z.enum(["add", "use", "adjust"]),
+    quantity: z.coerce.number().finite(),
+    expiresAt: z.string().datetime().optional().nullable(),
+    note: z.string().trim().max(500).optional().nullable()
+  })
+  .superRefine((value, ctx) => {
+    if ((value.action === "add" || value.action === "use") && value.quantity <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["quantity"],
+        message: "Quantity must be greater than 0 for add/use actions"
+      });
+    }
+    if (value.action === "adjust" && value.quantity < 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["quantity"],
+        message: "Quantity must be at least 0 for adjust action"
+      });
+    }
+  });
+
 function trimToNull(value?: string | null) {
   if (value === undefined) return undefined;
   if (value === null) return null;
@@ -163,7 +187,11 @@ export function createFoodRouter(prisma: PrismaClient) {
     }
 
     const foodItems = await prisma.inventoryItem.findMany({
-      where: { householdId, subtype: InventorySubtype.FOOD },
+      where: {
+        householdId,
+        subtype: InventorySubtype.FOOD,
+        OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }]
+      },
       select: { name: true, unit: true, quantity: true }
     });
 
@@ -204,6 +232,79 @@ export function createFoodRouter(prisma: PrismaClient) {
       feasible: shortages.length === 0,
       ingredients: ingredientChecks,
       shortages
+    });
+  });
+
+  router.post("/stock/:id/mutate", async (req, res) => {
+    const { householdId, user } = await ensureContext(prisma, req);
+    const payload = foodStockMutationSchema.parse(req.body ?? {});
+
+    const existing = await prisma.inventoryItem.findFirst({
+      where: { id: req.params.id, householdId, subtype: InventorySubtype.FOOD }
+    });
+
+    if (!existing) {
+      res.status(404).json({ message: "Food stock item not found" });
+      return;
+    }
+
+    const currentQuantity = Number(existing.quantity);
+    const nextQuantity =
+      payload.action === "add"
+        ? currentQuantity + payload.quantity
+        : payload.action === "use"
+          ? currentQuantity - payload.quantity
+          : payload.quantity;
+    const delta = nextQuantity - currentQuantity;
+
+    if (nextQuantity < 0) {
+      res.status(409).json({
+        message: "Stock transition rejected: quantity would become negative",
+        currentQuantity,
+        attemptedDelta: delta
+      });
+      return;
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.inventoryItem.update({
+        where: { id: existing.id },
+        data: {
+          quantity: nextQuantity,
+          ...(payload.expiresAt !== undefined ? { expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : null } : {})
+        }
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: user.id,
+          action: `food_stock_${payload.action}`,
+          entityType: "InventoryItem",
+          entityId: existing.id,
+          payload: {
+            itemName: updated.name,
+            unit: updated.unit,
+            beforeQuantity: currentQuantity,
+            delta,
+            afterQuantity: Number(updated.quantity),
+            expiresAt: updated.expiresAt?.toISOString() ?? null,
+            note: trimToNull(payload.note),
+            action: payload.action
+          }
+        }
+      });
+
+      return updated;
+    });
+
+    res.json({
+      id: result.id,
+      name: result.name,
+      subtype: result.subtype,
+      quantity: Number(result.quantity),
+      unit: result.unit,
+      expiresAt: result.expiresAt,
+      delta
     });
   });
 
