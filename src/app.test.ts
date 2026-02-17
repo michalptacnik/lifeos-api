@@ -110,4 +110,36 @@ describe("lifeos-api integration routes", () => {
     expect(res.body.selected).toHaveLength(1);
     expect(res.body.changes).toHaveLength(1);
   });
+
+  it("reports ready when dependency checks pass", async () => {
+    const prisma = basePrismaMock();
+    const app = createApp(prisma as any, {
+      readinessCheck: async () => ({
+        status: "ready",
+        checks: { database: "up", redis: "up" }
+      })
+    });
+
+    const res = await request(app).get("/ready");
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("ready");
+    expect(res.body.checks.database).toBe("up");
+    expect(res.body.checks.redis).toBe("up");
+  });
+
+  it("reports not_ready when a dependency check fails", async () => {
+    const prisma = basePrismaMock();
+    const app = createApp(prisma as any, {
+      readinessCheck: async () => ({
+        status: "not_ready",
+        checks: { database: "up", redis: "down" }
+      })
+    });
+
+    const res = await request(app).get("/ready");
+    expect(res.status).toBe(503);
+    expect(res.body.status).toBe("not_ready");
+    expect(res.body.checks.database).toBe("up");
+    expect(res.body.checks.redis).toBe("down");
+  });
 });

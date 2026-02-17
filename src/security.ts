@@ -25,6 +25,11 @@ export function validateStartupConfig() {
     throw new Error("INTERNAL_API_KEY must be set to a strong value (32+ chars, non-placeholder)");
   }
 
+  const redisUrl = process.env.REDIS_URL?.trim();
+  if (!redisUrl) {
+    throw new Error("REDIS_URL is required");
+  }
+
   const adminPassword = process.env.ADMIN_PASSWORD;
   if (!adminPassword && !isLocalDev()) {
     throw new Error("ADMIN_PASSWORD is required outside development");

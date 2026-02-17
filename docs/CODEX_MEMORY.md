@@ -9,12 +9,14 @@
 - Login lockout/rate limiting is Redis-backed (shared IP+email lockout policy across instances).
 - Startup validation now requires `REDIS_URL` so lockout state is not local-only.
 - Production v1 runtime surface excludes placeholder endpoints; no `501 Not implemented` routes are exposed.
+- Added `/ready` endpoint for dependency readiness (Postgres + Redis), separate from `/health` liveness.
 
 ## Key files
 - `src/routes/auth.ts`
 - `src/services/auth-service.ts`
 - `src/services/login-attempt-store.ts`
 - `src/routes/me.ts`
+- `src/readiness.ts`
 - `src/security.ts`
 - `src/bootstrap.ts`
 
