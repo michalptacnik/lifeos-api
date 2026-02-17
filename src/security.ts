@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 
 const weakInternalKeyValues = new Set(["replace_with_shared_internal_key", "change_me_shared_internal_api_key_min_32_chars"]);
+const simpleEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function safeEqual(a: string, b: string) {
   const aBuf = Buffer.from(a);
@@ -15,6 +16,10 @@ export function hasStrongInternalKey(value?: string) {
   return value.length >= 32;
 }
 
+export function isValidActorEmail(value: string) {
+  return simpleEmailRegex.test(value);
+}
+
 function isLocalDev() {
   return process.env.NODE_ENV === "development";
 }
@@ -23,6 +28,12 @@ export function validateStartupConfig() {
   const internalKey = process.env.INTERNAL_API_KEY;
   if (!hasStrongInternalKey(internalKey)) {
     throw new Error("INTERNAL_API_KEY must be set to a strong value (32+ chars, non-placeholder)");
+  }
+
+  const devBypassEnabled = process.env.ALLOW_DEV_AUTH_BYPASS === "true";
+  const devBypassEmail = process.env.DEV_AUTH_BYPASS_EMAIL?.trim();
+  if (process.env.NODE_ENV === "production" && (devBypassEnabled || devBypassEmail)) {
+    throw new Error("Dev auth bypass env vars are forbidden in production");
   }
 
   const adminPassword = process.env.ADMIN_PASSWORD;

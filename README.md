@@ -28,3 +28,8 @@ cp .env.example .env
 npm run prisma:generate
 npm run dev
 ```
+
+## Internal trust boundary
+- Protected routes require both `x-internal-api-key` and `x-user-email` headers.
+- `x-user-email` must be a valid email; malformed or missing values are rejected at API boundary.
+- Production startup fails if dev bypass env vars are configured (`ALLOW_DEV_AUTH_BYPASS=true` or non-empty `DEV_AUTH_BYPASS_EMAIL`).

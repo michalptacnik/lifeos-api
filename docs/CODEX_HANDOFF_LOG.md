@@ -43,3 +43,30 @@
 ### Next steps
 - Push this branch and verify `API CI` workflow passes in GitHub Actions.
 - Enforce `API CI` as required status check on `main`.
+
+## 2026-02-17 (MVP0 auth trust-boundary hardening)
+### What changed
+- Hardened API middleware in `src/app.ts` to enforce trusted forwarding contract on protected routes:
+  - require strong `x-internal-api-key`
+  - require `x-user-email`
+  - reject malformed `x-user-email` at boundary before route logic
+- Added actor email validation helper in `src/security.ts`.
+- Updated startup validation in `src/security.ts` to fail in production when dev bypass env vars are configured (`ALLOW_DEV_AUTH_BYPASS` or `DEV_AUTH_BYPASS_EMAIL`).
+- Added domain-level defense-in-depth validation in `src/domain.ts` for actor email format.
+- Added regression tests:
+  - `src/app.test.ts` for missing/invalid actor header handling
+  - `src/security.test.ts` for production bypass-env rejection
+- Updated `README.md` and `docs/CODEX_MEMORY.md` trust-boundary documentation.
+
+### Why
+- Implement MVP0 trust-boundary controls so production identity forwarding assumptions are explicit and validated, with no silent acceptance of unsafe bypass configuration.
+
+### Commands/tests run
+- `./node_modules/.bin/tsc --noEmit && npm run test && npm run build`
+
+### Known issues/risks
+- API still treats possession of `INTERNAL_API_KEY` as sufficient trust for caller identity; this requires private-network ingress controls at deploy layer.
+
+### Next steps
+- Align infra ingress/network policy docs to explicitly restrict API internal routes to trusted proxy paths.
+- Continue with MVP1 inventory schema/API work after merging foundation PRs.
