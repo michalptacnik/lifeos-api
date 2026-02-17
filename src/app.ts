@@ -8,6 +8,7 @@ import { createAuthRouter } from "./routes/auth.js";
 import { actorHeader } from "./domain.js";
 import { createFoodRouter } from "./routes/food.js";
 import { createInventoryRouter } from "./routes/inventory.js";
+import { createMatrixRouter } from "./routes/matrix.js";
 import { createMeRouter } from "./routes/me.js";
 import { createTasksRouter } from "./routes/tasks.js";
 import { createWorktimeRouter } from "./routes/worktime.js";
@@ -76,6 +77,7 @@ export function createApp(prisma: PrismaClient, options?: { readinessCheck?: Rea
   app.use("/tasks", createTasksRouter(prisma));
   app.use("/inventory", createInventoryRouter(prisma));
   app.use("/food", createFoodRouter(prisma));
+  app.use("/matrix", createMatrixRouter(prisma));
   app.use("/worktime", createWorktimeRouter(prisma));
   app.use("/automation", createAutomationRouter(prisma));
   app.use("/calendar", createCalendarRouter(prisma));

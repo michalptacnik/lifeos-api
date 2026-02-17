@@ -31,6 +31,12 @@ enum InventorySubtype {
   FOOD
 }
 
+enum MatrixMembershipState {
+  JOINED
+  INVITED
+  LEFT
+}
+
 model User {
   id           String        @id @default(cuid())
   email        String        @unique
@@ -43,6 +49,8 @@ model User {
   tasks        Task[]        @relation("TaskOwner")
   audits       AuditLog[]
   workSessions WorkSession[]
+  matrixIdentity MatrixIdentity?
+  matrixRoomMemberships MatrixRoomMembership[]
 }
 
 model Household {
@@ -54,6 +62,7 @@ model Household {
   accounts    Account[]
   inventory   InventoryItem[]
   recipes     Recipe[]
+  matrixRooms MatrixRoom[]
   obligations Obligation[]
 }
 
@@ -189,4 +198,60 @@ model AuditLog {
   payload     Json?
   createdAt   DateTime @default(now())
   actor       User?    @relation(fields: [actorUserId], references: [id])
+}
+
+model MatrixIdentity {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  matrixUserId String   @unique
+  displayName  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+model MatrixRoom {
+  id              String                 @id @default(cuid())
+  householdId     String
+  externalRoomId  String
+  alias           String?
+  name            String
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  household       Household              @relation(fields: [householdId], references: [id])
+  memberships     MatrixRoomMembership[]
+  relayEvents     MatrixRelayEvent[]
+
+  @@unique([householdId, externalRoomId])
+  @@index([householdId, name])
+}
+
+model MatrixRoomMembership {
+  id                String                @id @default(cuid())
+  roomId            String
+  userId            String
+  membership        MatrixMembershipState @default(JOINED)
+  unreadCount       Int                   @default(0)
+  notificationCount Int                   @default(0)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  room              MatrixRoom            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user              User                  @relation(fields: [userId], references: [id])
+
+  @@unique([roomId, userId])
+  @@index([userId, membership])
+}
+
+model MatrixRelayEvent {
+  id                String   @id @default(cuid())
+  roomId            String
+  externalEventId   String
+  eventType         String
+  senderMatrixUserId String?
+  payload           Json?
+  createdAt         DateTime @default(now())
+  room              MatrixRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, externalEventId])
+  @@index([roomId, createdAt])
 }

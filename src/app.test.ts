@@ -4,7 +4,7 @@ import { createApp } from "./app.js";
 
 function basePrismaMock() {
   return {
-    user: { upsert: vi.fn() },
+    user: { upsert: vi.fn(), findUnique: vi.fn() },
     membership: { findFirst: vi.fn(), create: vi.fn(), upsert: vi.fn() },
     household: { create: vi.fn() },
     task: {
@@ -33,6 +33,21 @@ function basePrismaMock() {
       deleteMany: vi.fn(),
       createMany: vi.fn()
     },
+    matrixIdentity: {
+      upsert: vi.fn()
+    },
+    matrixRoom: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      upsert: vi.fn()
+    },
+    matrixRoomMembership: {
+      upsert: vi.fn(),
+      updateMany: vi.fn()
+    },
+    matrixRelayEvent: {
+      upsert: vi.fn()
+    },
     workSession: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
@@ -48,7 +63,11 @@ function basePrismaMock() {
         auditLog: { create: vi.fn() },
         inventoryItem: { update: vi.fn() },
         recipe: { update: vi.fn(), findUniqueOrThrow: vi.fn() },
-        recipeIngredient: { deleteMany: vi.fn(), createMany: vi.fn() }
+        recipeIngredient: { deleteMany: vi.fn(), createMany: vi.fn() },
+        user: { upsert: vi.fn() },
+        membership: { upsert: vi.fn() },
+        matrixIdentity: { upsert: vi.fn() },
+        matrixRoomMembership: { upsert: vi.fn() }
       })
     )
   };
@@ -383,5 +402,100 @@ describe("lifeos-api integration routes", () => {
 
     expect(res.status).toBe(409);
     expect(res.body.message).toContain("negative");
+  });
+
+  it("bootstraps a matrix room and actor identity", async () => {
+    const prisma = basePrismaMock();
+    prisma.user.upsert.mockResolvedValue({ id: "u1", email: "dev@example.com" });
+    prisma.membership.findFirst.mockResolvedValue({ householdId: "h1" });
+    prisma.matrixRoom.upsert.mockResolvedValue({
+      id: "mr1",
+      externalRoomId: "!room:example.org",
+      alias: "#lifeos:example.org",
+      name: "LifeOS Core",
+      createdAt: new Date("2026-02-17T00:00:00.000Z"),
+      updatedAt: new Date("2026-02-17T00:00:00.000Z")
+    });
+    prisma.matrixIdentity.upsert.mockResolvedValue({
+      matrixUserId: "@dev:example.org"
+    });
+    prisma.matrixRoomMembership.upsert.mockResolvedValue({
+      membership: "JOINED"
+    });
+
+    const app = createApp(prisma as any);
+    const res = await request(app)
+      .post("/matrix/rooms/bootstrap")
+      .set("x-internal-api-key", process.env.INTERNAL_API_KEY!)
+      .set("x-user-email", "dev@example.com")
+      .send({
+        externalRoomId: "!room:example.org",
+        name: "LifeOS Core",
+        alias: "#lifeos:example.org",
+        actorMatrixUserId: "@dev:example.org"
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.room.externalRoomId).toBe("!room:example.org");
+    expect(res.body.actor.membership).toBe("JOINED");
+  });
+
+  it("syncs matrix room membership for household users", async () => {
+    const prisma = basePrismaMock();
+    prisma.user.upsert.mockResolvedValue({ id: "u1", email: "dev@example.com" });
+    prisma.membership.findFirst.mockResolvedValue({ householdId: "h1" });
+    prisma.matrixRoom.findFirst.mockResolvedValue({ id: "mr1", householdId: "h1" });
+
+    prisma.$transaction.mockImplementation(async (cb: (tx: any) => Promise<any>) =>
+      cb({
+        user: {
+          upsert: vi.fn().mockResolvedValue({ id: "u2", email: "cook@example.com" })
+        },
+        membership: { upsert: vi.fn().mockResolvedValue({ id: "m2" }) },
+        matrixIdentity: { upsert: vi.fn().mockResolvedValue({ matrixUserId: "@cook:example.org" }) },
+        matrixRoomMembership: { upsert: vi.fn().mockResolvedValue({ membership: "INVITED" }) }
+      })
+    );
+
+    const app = createApp(prisma as any);
+    const res = await request(app)
+      .post("/matrix/rooms/mr1/sync-membership")
+      .set("x-internal-api-key", process.env.INTERNAL_API_KEY!)
+      .set("x-user-email", "dev@example.com")
+      .send({
+        members: [{ email: "cook@example.com", membership: "INVITED", matrixUserId: "@cook:example.org" }]
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.syncedCount).toBe(1);
+    expect(res.body.members[0].membership).toBe("INVITED");
+  });
+
+  it("accepts matrix relay hook and updates unread counts", async () => {
+    const prisma = basePrismaMock();
+    prisma.user.upsert.mockResolvedValue({ id: "u1", email: "dev@example.com" });
+    prisma.membership.findFirst.mockResolvedValue({ householdId: "h1" });
+    prisma.matrixRoom.findFirst.mockResolvedValue({ id: "mr1", householdId: "h1" });
+    prisma.matrixRelayEvent.upsert.mockResolvedValue({
+      id: "re1",
+      externalEventId: "$event1"
+    });
+    prisma.user.findUnique.mockResolvedValue({ id: "u2", email: "cook@example.com" });
+    prisma.matrixRoomMembership.updateMany.mockResolvedValue({ count: 1 });
+
+    const app = createApp(prisma as any);
+    const res = await request(app)
+      .post("/matrix/rooms/mr1/relay")
+      .set("x-internal-api-key", process.env.INTERNAL_API_KEY!)
+      .set("x-user-email", "dev@example.com")
+      .send({
+        externalEventId: "$event1",
+        eventType: "m.room.message",
+        unreadByEmail: [{ email: "cook@example.com", unreadCount: 4, notificationCount: 1 }]
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.externalEventId).toBe("$event1");
+    expect(res.body.updatedUnreadEntries).toBe(1);
   });
 });
