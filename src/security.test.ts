@@ -4,6 +4,7 @@ import { validateStartupConfig } from "./security.js";
 describe("security startup validation", () => {
   beforeEach(() => {
     vi.stubEnv("INTERNAL_API_KEY", "12345678901234567890123456789012");
+    vi.stubEnv("REDIS_URL", "redis://127.0.0.1:6379");
     vi.stubEnv("ADMIN_PASSWORD", "supersecure");
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("ALLOW_DEV_AUTH_BYPASS", "false");

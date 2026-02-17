@@ -6,6 +6,7 @@ import { createAutomationRouter } from "./routes/automation.js";
 import { createCalendarRouter } from "./routes/calendar.js";
 import { createAuthRouter } from "./routes/auth.js";
 import { actorHeader } from "./domain.js";
+import { createInventoryRouter } from "./routes/inventory.js";
 import { createMeRouter } from "./routes/me.js";
 import { createTasksRouter } from "./routes/tasks.js";
 import { createWorktimeRouter } from "./routes/worktime.js";
@@ -72,6 +73,7 @@ export function createApp(prisma: PrismaClient, options?: { readinessCheck?: Rea
   });
 
   app.use("/tasks", createTasksRouter(prisma));
+  app.use("/inventory", createInventoryRouter(prisma));
   app.use("/worktime", createWorktimeRouter(prisma));
   app.use("/automation", createAutomationRouter(prisma));
   app.use("/calendar", createCalendarRouter(prisma));

@@ -14,6 +14,13 @@ function basePrismaMock() {
       update: vi.fn(),
       deleteMany: vi.fn()
     },
+    inventoryItem: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      deleteMany: vi.fn()
+    },
     workSession: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
@@ -166,5 +173,52 @@ describe("lifeos-api integration routes", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.message).toContain("x-user-email");
+  });
+
+  it("creates an inventory item", async () => {
+    const prisma = basePrismaMock();
+    prisma.user.upsert.mockResolvedValue({ id: "u1", email: "dev@example.com" });
+    prisma.membership.findFirst.mockResolvedValue({ householdId: "h1" });
+    prisma.inventoryItem.create.mockResolvedValue({
+      id: "i1",
+      name: "Rice",
+      subtype: "FOOD",
+      quantity: 2,
+      unit: "kg",
+      category: "Dry goods",
+      location: "Pantry",
+      createdAt: new Date("2026-02-17T00:00:00.000Z"),
+      updatedAt: new Date("2026-02-17T00:00:00.000Z")
+    });
+
+    const app = createApp(prisma as any);
+    const res = await request(app)
+      .post("/inventory")
+      .set("x-internal-api-key", process.env.INTERNAL_API_KEY!)
+      .set("x-user-email", "dev@example.com")
+      .send({ name: "Rice", subtype: "FOOD", quantity: 2, unit: "kg", category: "Dry goods", location: "Pantry" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.name).toBe("Rice");
+    expect(res.body.subtype).toBe("FOOD");
+  });
+
+  it("filters inventory items by subtype", async () => {
+    const prisma = basePrismaMock();
+    prisma.user.upsert.mockResolvedValue({ id: "u1", email: "dev@example.com" });
+    prisma.membership.findFirst.mockResolvedValue({ householdId: "h1" });
+    prisma.inventoryItem.findMany.mockResolvedValue([]);
+
+    const app = createApp(prisma as any);
+    const res = await request(app)
+      .get("/inventory?subtype=FOOD")
+      .set("x-internal-api-key", process.env.INTERNAL_API_KEY!)
+      .set("x-user-email", "dev@example.com");
+
+    expect(res.status).toBe(200);
+    expect(prisma.inventoryItem.findMany).toHaveBeenCalledWith({
+      where: { householdId: "h1", subtype: "FOOD" },
+      orderBy: [{ subtype: "asc" }, { name: "asc" }]
+    });
   });
 });
