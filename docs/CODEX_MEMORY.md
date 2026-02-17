@@ -14,6 +14,7 @@
 - Production startup now rejects dev bypass env configuration (`ALLOW_DEV_AUTH_BYPASS`/`DEV_AUTH_BYPASS_EMAIL`).
 - Inventory domain now supports subtype-aware items (`HOME`, `WORK`, `FOOD`) with quantity/unit semantics.
 - Food domain now includes recipe storage with ingredient quantities and deterministic availability checks against `FOOD` inventory items.
+- Food inventory now supports guarded stock mutations (`add/use/adjust`) with transactional audit logging and optional expiration dates.
 
 ## Key files
 - `src/routes/auth.ts`
@@ -36,8 +37,10 @@
 - Production should set explicit `ADMIN_PASSWORD` and avoid development defaults.
 - Inventory endpoints are household-scoped via `ensureContext` and support subtype filtering.
 - Food recipe endpoints are household-scoped via `ensureContext`; availability checks compare normalized ingredient `(name, unit)` against aggregated `FOOD` inventory quantities and return exact shortages.
+- Food stock mutation endpoint (`POST /food/stock/:id/mutate`) rejects negative transitions and writes `AuditLog` entries with actor/action/delta payload.
 
 ## Open risks
 - Need stronger production-grade auth observability/audit for failed login patterns.
 - Redis outage currently blocks login lockout checks (auth availability dependency).
 - Recipe ingredient matching currently depends on exact normalized `(name, unit)` strings; no unit conversion or synonym resolution is implemented yet.
+- Food availability currently ignores unit conversion; expiration filtering only excludes items with `expiresAt` in the past.

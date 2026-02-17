@@ -46,6 +46,7 @@ function basePrismaMock() {
       cb({
         task: { update: vi.fn() },
         auditLog: { create: vi.fn() },
+        inventoryItem: { update: vi.fn() },
         recipe: { update: vi.fn(), findUniqueOrThrow: vi.fn() },
         recipeIngredient: { deleteMany: vi.fn(), createMany: vi.fn() }
       })
@@ -311,8 +312,76 @@ describe("lifeos-api integration routes", () => {
       ])
     );
     expect(prisma.inventoryItem.findMany).toHaveBeenCalledWith({
-      where: { householdId: "h1", subtype: "FOOD" },
+      where: {
+        householdId: "h1",
+        subtype: "FOOD",
+        OR: [{ expiresAt: null }, { expiresAt: { gte: expect.any(Date) } }]
+      },
       select: { name: true, unit: true, quantity: true }
     });
+  });
+
+  it("applies safe food stock use mutation and writes audit entry", async () => {
+    const prisma = basePrismaMock();
+    prisma.user.upsert.mockResolvedValue({ id: "u1", email: "dev@example.com" });
+    prisma.membership.findFirst.mockResolvedValue({ householdId: "h1" });
+    prisma.inventoryItem.findFirst.mockResolvedValue({
+      id: "i1",
+      householdId: "h1",
+      name: "Rice",
+      subtype: "FOOD",
+      quantity: 5,
+      unit: "kg"
+    });
+    prisma.$transaction.mockImplementation(async (cb: (tx: any) => Promise<any>) =>
+      cb({
+        inventoryItem: {
+          update: vi.fn().mockResolvedValue({
+            id: "i1",
+            name: "Rice",
+            subtype: "FOOD",
+            quantity: 3,
+            unit: "kg",
+            expiresAt: null
+          })
+        },
+        auditLog: { create: vi.fn().mockResolvedValue({ id: "a1" }) }
+      })
+    );
+
+    const app = createApp(prisma as any);
+    const res = await request(app)
+      .post("/food/stock/i1/mutate")
+      .set("x-internal-api-key", process.env.INTERNAL_API_KEY!)
+      .set("x-user-email", "dev@example.com")
+      .send({ action: "use", quantity: 2, note: "Dinner prep" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.quantity).toBe(3);
+    expect(res.body.delta).toBe(-2);
+  });
+
+  it("rejects food stock mutation that would create negative quantity", async () => {
+    const prisma = basePrismaMock();
+    prisma.user.upsert.mockResolvedValue({ id: "u1", email: "dev@example.com" });
+    prisma.membership.findFirst.mockResolvedValue({ householdId: "h1" });
+    prisma.inventoryItem.findFirst.mockResolvedValue({
+      id: "i1",
+      householdId: "h1",
+      name: "Milk",
+      subtype: "FOOD",
+      quantity: 1,
+      unit: "l"
+    });
+
+    const app = createApp(prisma as any);
+    const res = await request(app)
+      .post("/food/stock/i1/mutate")
+      .set("x-internal-api-key", process.env.INTERNAL_API_KEY!)
+      .set("x-user-email", "dev@example.com")
+      .send({ action: "use", quantity: 2 });
+
+    expect(res.status).toBe(409);
+    expect(res.body.message).toContain("negative");
   });
 });
