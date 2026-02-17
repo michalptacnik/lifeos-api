@@ -2,14 +2,24 @@
 
 Modular monolith backend for LifeOS using Node.js, TypeScript, Express, Prisma, and PostgreSQL.
 
-## Domain Modules
-- Authentication & Authorization
-- Tasks
-- Budgets & Cashflow
-- Inventory
-- Recurring Obligations
-- Notifications
-- Audit Logging
+## V1 Surface
+- `GET /health` (liveness)
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /me`
+- `GET /tasks`
+- `POST /tasks`
+- `PATCH /tasks/:id`
+- `DELETE /tasks/:id`
+- `GET /worktime`
+- `POST /worktime/start`
+- `POST /worktime/stop`
+- `PATCH /worktime/:id`
+- `GET /automation/activity`
+- `POST /automation/plan-day`
+- `GET /calendar/tasks.ics`
+
+Non-v1 placeholder endpoints are intentionally not exposed in runtime.
 
 ## Quick Start
 ```bash

@@ -6,7 +6,6 @@ import { createAutomationRouter } from "./routes/automation.js";
 import { createCalendarRouter } from "./routes/calendar.js";
 import { createAuthRouter } from "./routes/auth.js";
 import { createMeRouter } from "./routes/me.js";
-import { createStubRouter } from "./routes/stubs.js";
 import { createTasksRouter } from "./routes/tasks.js";
 import { createWorktimeRouter } from "./routes/worktime.js";
 import { hasStrongInternalKey, safeEqual } from "./security.js";
@@ -44,20 +43,12 @@ export function createApp(prisma: PrismaClient) {
     res.json({ status: "ok", service: "lifeos-api" });
   });
 
-  app.get("/dashboard", (_req, res) => {
-    res.json({
-      message: "Dashboard aggregate endpoint placeholder",
-      modules: ["tasks", "budgets", "inventory", "obligations"]
-    });
-  });
-
   app.use("/tasks", createTasksRouter(prisma));
   app.use("/worktime", createWorktimeRouter(prisma));
   app.use("/automation", createAutomationRouter(prisma));
   app.use("/calendar", createCalendarRouter(prisma));
   app.use("/auth", createAuthRouter(prisma));
   app.use("/me", createMeRouter(prisma));
-  app.use(createStubRouter());
 
   app.use((err: Error, _req: Request, res: Response, _next: () => void) => {
     res.status(500).json({ message: err.message });
