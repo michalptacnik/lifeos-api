@@ -1,6 +1,7 @@
 import { PrismaClient, Role, TaskArea, TaskStatus } from "@prisma/client";
 import type { Request } from "express";
 import { z } from "zod";
+import { isValidActorEmail } from "./security.js";
 
 export const actorHeader = "x-user-email";
 
@@ -86,6 +87,9 @@ function requireActorEmail(req: Request): string {
   const raw = req.header(actorHeader)?.trim().toLowerCase();
   if (!raw) {
     throw new Error(`Missing required header: ${actorHeader}`);
+  }
+  if (!isValidActorEmail(raw)) {
+    throw new Error(`Invalid required header: ${actorHeader}`);
   }
   return raw;
 }

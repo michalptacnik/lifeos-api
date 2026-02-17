@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 
 const weakInternalKeyValues = new Set(["replace_with_shared_internal_key", "change_me_shared_internal_api_key_min_32_chars"]);
+const simpleEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function safeEqual(a: string, b: string) {
   const aBuf = Buffer.from(a);
@@ -13,6 +14,10 @@ export function hasStrongInternalKey(value?: string) {
   if (!value) return false;
   if (weakInternalKeyValues.has(value)) return false;
   return value.length >= 32;
+}
+
+export function isValidActorEmail(value: string) {
+  return simpleEmailRegex.test(value);
 }
 
 function isLocalDev() {
@@ -28,6 +33,12 @@ export function validateStartupConfig() {
   const redisUrl = process.env.REDIS_URL?.trim();
   if (!redisUrl) {
     throw new Error("REDIS_URL is required");
+  }
+
+  const devBypassEnabled = process.env.ALLOW_DEV_AUTH_BYPASS === "true";
+  const devBypassEmail = process.env.DEV_AUTH_BYPASS_EMAIL?.trim();
+  if (process.env.NODE_ENV === "production" && (devBypassEnabled || devBypassEmail)) {
+    throw new Error("Dev auth bypass env vars are forbidden in production");
   }
 
   const adminPassword = process.env.ADMIN_PASSWORD;
