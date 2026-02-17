@@ -5,10 +5,11 @@ import type { PrismaClient } from "@prisma/client";
 import { createAutomationRouter } from "./routes/automation.js";
 import { createCalendarRouter } from "./routes/calendar.js";
 import { createAuthRouter } from "./routes/auth.js";
+import { actorHeader } from "./domain.js";
 import { createMeRouter } from "./routes/me.js";
 import { createTasksRouter } from "./routes/tasks.js";
 import { createWorktimeRouter } from "./routes/worktime.js";
-import { hasStrongInternalKey, safeEqual } from "./security.js";
+import { hasStrongInternalKey, isValidActorEmail, safeEqual } from "./security.js";
 import { type ReadinessCheck } from "./readiness.js";
 
 const internalHeader = "x-internal-api-key";
@@ -36,6 +37,17 @@ export function createApp(prisma: PrismaClient, options?: { readinessCheck?: Rea
       res.status(401).json({ message: "Unauthorized" });
       return;
     }
+
+    const rawActorEmail = req.header(actorHeader)?.trim().toLowerCase();
+    if (!rawActorEmail) {
+      res.status(401).json({ message: `Missing required header: ${actorHeader}` });
+      return;
+    }
+    if (!isValidActorEmail(rawActorEmail)) {
+      res.status(400).json({ message: `Invalid required header: ${actorHeader}` });
+      return;
+    }
+    req.headers[actorHeader] = rawActorEmail;
 
     next();
   });

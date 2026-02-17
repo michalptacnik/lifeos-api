@@ -142,4 +142,29 @@ describe("lifeos-api integration routes", () => {
     expect(res.body.checks.database).toBe("up");
     expect(res.body.checks.redis).toBe("down");
   });
+
+  it("returns 401 when actor header is missing", async () => {
+    const prisma = basePrismaMock();
+    const app = createApp(prisma as any);
+
+    const res = await request(app)
+      .get("/tasks")
+      .set("x-internal-api-key", process.env.INTERNAL_API_KEY!);
+
+    expect(res.status).toBe(401);
+    expect(res.body.message).toContain("x-user-email");
+  });
+
+  it("returns 400 when actor header is invalid", async () => {
+    const prisma = basePrismaMock();
+    const app = createApp(prisma as any);
+
+    const res = await request(app)
+      .get("/tasks")
+      .set("x-internal-api-key", process.env.INTERNAL_API_KEY!)
+      .set("x-user-email", "not-an-email");
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain("x-user-email");
+  });
 });
