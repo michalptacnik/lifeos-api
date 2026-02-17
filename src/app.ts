@@ -9,17 +9,18 @@ import { createMeRouter } from "./routes/me.js";
 import { createTasksRouter } from "./routes/tasks.js";
 import { createWorktimeRouter } from "./routes/worktime.js";
 import { hasStrongInternalKey, safeEqual } from "./security.js";
+import { type ReadinessCheck } from "./readiness.js";
 
 const internalHeader = "x-internal-api-key";
 
-export function createApp(prisma: PrismaClient) {
+export function createApp(prisma: PrismaClient, options?: { readinessCheck?: ReadinessCheck }) {
   const app = express();
   app.use(helmet());
   app.use(cors());
   app.use(express.json());
 
   app.use((req, res, next) => {
-    if (req.path === "/health" || req.path === "/auth/login" || req.path === "/auth/register") {
+    if (req.path === "/health" || req.path === "/ready" || req.path === "/auth/login" || req.path === "/auth/register") {
       next();
       return;
     }
@@ -41,6 +42,21 @@ export function createApp(prisma: PrismaClient) {
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok", service: "lifeos-api" });
+  });
+
+  app.get("/ready", async (_req, res) => {
+    if (!options?.readinessCheck) {
+      res.json({
+        status: "ready",
+        service: "lifeos-api",
+        checks: { database: "up", redis: "up" }
+      });
+      return;
+    }
+
+    const result = await options.readinessCheck();
+    const httpCode = result.status === "ready" ? 200 : 503;
+    res.status(httpCode).json({ service: "lifeos-api", ...result });
   });
 
   app.use("/tasks", createTasksRouter(prisma));

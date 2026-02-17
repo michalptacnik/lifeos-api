@@ -4,6 +4,7 @@ Modular monolith backend for LifeOS using Node.js, TypeScript, Express, Prisma, 
 
 ## V1 Surface
 - `GET /health` (liveness)
+- `GET /ready` (readiness: DB + Redis)
 - `POST /auth/register`
 - `POST /auth/login`
 - `GET /me`
