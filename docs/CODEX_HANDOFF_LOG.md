@@ -93,3 +93,30 @@
 ### Next steps
 - Align infra ingress/network policy docs to explicitly restrict API internal routes to trusted proxy paths.
 - Continue with MVP1 inventory schema/API work after merging foundation PRs.
+
+## 2026-02-17 (MVP1 inventory core API)
+### What changed
+- Added inventory subtype support in Prisma schema (`InventorySubtype`: `HOME`, `WORK`, `FOOD`) and inventory item fields for `quantity`, `unit`, `createdAt`, `updatedAt`.
+- Added migration `prisma/migrations/20260217133000_inventory_subtypes/migration.sql` for enum/columns/index.
+- Implemented `src/routes/inventory.ts` with household-scoped CRUD endpoints:
+  - `GET /inventory` with optional `subtype` filter
+  - `POST /inventory`
+  - `PATCH /inventory/:id`
+  - `DELETE /inventory/:id`
+- Wired inventory routes in `src/app.ts`.
+- Extended integration tests in `src/app.test.ts` for inventory create and subtype filtering.
+- Updated `README.md` API surface and `docs/CODEX_MEMORY.md` for inventory domain changes.
+
+### Why
+- Execute MVP1 inventory core issue by introducing subtype-aware inventory contracts and API endpoints aligned with `home/work/food` mental model.
+
+### Commands/tests run
+- `npm run prisma:generate`
+- `./node_modules/.bin/tsc --noEmit && npm run test && npm run build`
+
+### Known issues/risks
+- `quantity` precision is decimal-backed but currently serialized as `Number`, which may need string serialization for very high precision scenarios.
+
+### Next steps
+- Add food-specific fields/flows (recipes and ingredient availability checks) in MVP2.
+- Add contract tests for inventory update/delete error paths and invalid subtype query handling.

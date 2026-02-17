@@ -12,6 +12,10 @@ Modular monolith backend for LifeOS using Node.js, TypeScript, Express, Prisma, 
 - `POST /tasks`
 - `PATCH /tasks/:id`
 - `DELETE /tasks/:id`
+- `GET /inventory`
+- `POST /inventory`
+- `PATCH /inventory/:id`
+- `DELETE /inventory/:id`
 - `GET /worktime`
 - `POST /worktime/start`
 - `POST /worktime/stop`

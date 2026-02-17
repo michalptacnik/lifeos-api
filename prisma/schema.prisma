@@ -25,6 +25,12 @@ enum TaskArea {
   WORK
 }
 
+enum InventorySubtype {
+  HOME
+  WORK
+  FOOD
+}
+
 model User {
   id           String        @id @default(cuid())
   email        String        @unique
@@ -118,15 +124,22 @@ model CashflowEntry {
 }
 
 model InventoryItem {
-  id            String    @id @default(cuid())
+  id            String           @id @default(cuid())
   householdId   String
   name          String
+  subtype       InventorySubtype @default(HOME)
+  quantity      Decimal          @default(1)
+  unit          String           @default("item")
   category      String?
   location      String?
   acquiredAt    DateTime?
   currentValue  Decimal?
   warrantyUntil DateTime?
-  household     Household @relation(fields: [householdId], references: [id])
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  household     Household        @relation(fields: [householdId], references: [id])
+
+  @@index([householdId, subtype])
 }
 
 model Obligation {
